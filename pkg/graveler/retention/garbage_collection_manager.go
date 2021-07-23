@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/treeverse/lakefs/pkg/block"
+	"github.com/treeverse/lakefs/pkg/block/adapter"
 	"github.com/treeverse/lakefs/pkg/db"
 	"github.com/treeverse/lakefs/pkg/graveler"
 	"github.com/treeverse/lakefs/pkg/graveler/ref"
@@ -66,11 +68,15 @@ func NewGarbageCollectionManager(db db.Database, blockAdapter block.Adapter, ref
 }
 
 func (m *GarbageCollectionManager) GetRules(ctx context.Context, storageNamespace graveler.StorageNamespace) (*graveler.GarbageCollectionRules, error) {
-	reader, err := m.blockAdapter.Get(ctx, block.ObjectPointer{
+	objectPointer := block.ObjectPointer{
 		StorageNamespace: string(storageNamespace),
 		Identifier:       fmt.Sprintf(configFileSuffixTemplate, m.committedBlockStoragePrefix),
 		IdentifierType:   block.IdentifierTypeRelative,
-	}, -1)
+	}
+	reader, err := m.blockAdapter.Get(ctx, objectPointer, -1)
+	if errors.Is(err, adapter.ErrDataNotFound) {
+		return nil, graveler.ErrNotFound
+	}
 	if err != nil {
 		return nil, err
 	}
